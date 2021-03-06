@@ -2,6 +2,8 @@ use std::{io::Read, path::PathBuf};
 use std::fs;
 use std::process::Command;
 use std::process::Stdio;
+use std::collections::HashMap;
+
 use cargo_metadata::*;
 use cargo_metadata::diagnostic::DiagnosticCode;
 
@@ -19,7 +21,7 @@ fn main() {
     cmd.arg("--message-format");
     cmd.arg("json");
     let out = cmd.output().unwrap();
-    let mut errors = vec![];
+    let mut errors = HashMap::new();
     let reader = std::io::BufReader::new(out.stdout.take(10_000_000));
     for message in cargo_metadata::Message::parse_stream(reader) {
         match message.unwrap() {
@@ -27,8 +29,8 @@ fn main() {
                 //println!("{:#?}", msg);
                 let rendered = msg.message.rendered.unwrap();
                 let first = rendered.lines().next().unwrap();
-                errors.push(Error{ name : first.to_owned(), rendered: rendered.clone(), code: msg.message.code });
-                //println!("{:?}", first);
+                let entry = errors.entry(crate_name(&msg.package_id.repr)).or_insert(vec![]);
+                entry.push(Error{ name : first.to_owned(), rendered: rendered.clone(), code: msg.message.code });
             },
             Message::CompilerArtifact(_artifact) => {
             //    println!("{:?}", artifact);
@@ -47,13 +49,22 @@ fn main() {
     write_book(errors, target_dir);
 }
 
+fn crate_name(name: &str) -> String {
+    let parts :Vec<_>= name.split(' ').collect();
+    format!("{} {}", parts[0], parts[1])
+}
+
+fn crate_safe_file_name(name: &str) -> String {
+    name.replace(" ", "_").replace(".", "_")
+}
+
 struct Error {
     name: String,
     rendered: String,
     code: Option<DiagnosticCode>
 }
 
-fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
+fn write_book(errors: HashMap<String, Vec<Error>>, target_dir: PathBuf) {
     let data = r#"
     [book]
     title = "Yet Another ErrorBook"
@@ -84,9 +95,22 @@ fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
     # Summary
 
     "##);
-    for (i, error) in errors.iter().enumerate() {
-      summary.push_str(&format!("\n   - [{}]({}.md)", error.name, i));
-      let mut error_page = format!(r##"# {}
+    for (pkg, errors) in errors.iter() {
+        let pkg_filename = crate_safe_file_name(pkg) + ".md";
+        summary.push_str(&format!("\n   - [{}]({})", pkg, pkg_filename));
+        let mut pkg_page = format!(r##"# {}"##, pkg);
+
+        for (i, error) in errors.iter().enumerate() {
+            pkg_page.push_str(&format!("\n   - [{}]({}{})", error.name.replace("[", "").replace("]", ""), i, pkg_filename));
+        }
+
+        let pkg_pg_filename = format!("errorbook/src/{}", pkg_filename);
+        fs::write(target_dir.join(pkg_pg_filename), pkg_page).expect("Unable to write file");
+
+
+        for (i, error) in errors.iter().enumerate() {
+            summary.push_str(&format!("\n      - [{}]({}{})", error.name.replace("[", "").replace("]", ""), i, pkg_filename));
+            let mut error_page = format!(r##"# {}
 ```rust,noplaypen
 {}
 ```
@@ -95,7 +119,7 @@ fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
       if let Some(code) = &error.code {
          if let Some(explanation) = &code.explanation {
             error_page.push_str("\n");
-            error_page.push_str("## General explanation:\n");
+            error_page.push_str("## Explanation:\n");
             error_page.push_str(&explanation.replace("\n\n```", "\n\n```rust"));
           }
           if code.code.starts_with("E") && code.code.len() <= 6 {
@@ -104,9 +128,10 @@ fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
             error_page.push_str(&format!("\n\n( [Explain {} to me](https://duckduckgo.com/?q=rust+{}) ).\n\n", code.code, code.code));
           }
       }
-      let error_pg_filename = format!("errorbook/src/{}.md", i);
+      let error_pg_filename = format!("errorbook/src/{}{}", i, pkg_filename);
       fs::write(target_dir.join(error_pg_filename), error_page).expect("Unable to write file");
     }
+}
 
     fs::write(target_dir.join("errorbook/src/Summary.md"), summary).expect("Unable to write file");
 
@@ -114,5 +139,6 @@ fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
     compile.arg("build").current_dir(target_dir.join("errorbook"));
     compile.status().unwrap();
 
-    //Command::new(target_dir.join("errorbook/book/index.html")).spawn().unwrap();
+    if webbrowser::open(&target_dir.join("errorbook/book/index.html").as_os_str().to_string_lossy()).is_ok() {
+    }
 }
