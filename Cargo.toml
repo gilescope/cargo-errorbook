@@ -1,6 +1,6 @@
 [package]
 name = "cargo-errorbook"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Giles Cope <gilescope@gmail.com>"]
 edition = "2018"
 
