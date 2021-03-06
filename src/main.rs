@@ -7,7 +7,7 @@ use cargo_metadata::diagnostic::DiagnosticCode;
 
 //TODO: NFT your error book in one click...
 fn main() {
-    let args = std::env::args_os().skip(1);
+    let args = std::env::args_os().skip(2);
 //    let target_dir = PathBuf::from("/Users/gilescope/projects/cargo-errorbook/compile-errors/target/");
     let target_dir = PathBuf::from("target/");
 
@@ -43,7 +43,7 @@ fn main() {
         }
     }
     //let s = String::from_utf8_lossy(out.stderr.as_slice());
-
+    //println!("{}", s);
     write_book(errors, target_dir);
 }
 
@@ -93,8 +93,11 @@ fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
 
 "##, error.name, error.rendered);
       if let Some(code) = &error.code {
-          //https://doc.rust-lang.org/error-index.html#{}
-          error_page.push_str(&format!("[Explain {} to me](https://duckduckgo.com/?q=rust+{}).", code.code, code.code));
+          if code.code.starts_with("E") && code.code.len() <= 6 {
+            error_page.push_str(&format!("[Explain {} to me](https://doc.rust-lang.org/error-index.html#{}).", code.code, code.code));
+          }          else {
+            error_page.push_str(&format!("[Explain {} to me](https://duckduckgo.com/?q=rust+{}).", code.code, code.code));
+          }
       }
       let error_pg_filename = format!("errorbook/src/{}.md", i);
       fs::write(target_dir.join(error_pg_filename), error_page).expect("Unable to write file");

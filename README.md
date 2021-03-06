@@ -5,7 +5,7 @@ A saturday morning tribute to the work of Esteban and friends.
 
 
 ```
-cargo install --git git@github.com:gilescope/cargo-errorbook.git
+cargo install --git https://github.com/gilescope/cargo-errorbook.git 
 ```
 
 Then when you get some fun errors,
