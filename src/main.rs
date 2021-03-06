@@ -93,10 +93,15 @@ fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
 
 "##, error.name, error.rendered);
       if let Some(code) = &error.code {
+         if let Some(explanation) = &code.explanation {
+            error_page.push_str("\n");
+            error_page.push_str("## General explanation:\n");
+            error_page.push_str(&explanation.replace("\n\n```", "\n\n```rust"));
+          }
           if code.code.starts_with("E") && code.code.len() <= 6 {
-            error_page.push_str(&format!("[Explain {} to me](https://doc.rust-lang.org/error-index.html#{}).", code.code, code.code));
+            error_page.push_str(&format!("\n\n( [Explain {} to me](https://doc.rust-lang.org/error-index.html#{}) ).\n\n", code.code, code.code));
           }          else {
-            error_page.push_str(&format!("[Explain {} to me](https://duckduckgo.com/?q=rust+{}).", code.code, code.code));
+            error_page.push_str(&format!("\n\n( [Explain {} to me](https://duckduckgo.com/?q=rust+{}) ).\n\n", code.code, code.code));
           }
       }
       let error_pg_filename = format!("errorbook/src/{}.md", i);
@@ -108,4 +113,6 @@ fn write_book(errors: Vec<Error>, target_dir: PathBuf) {
     let mut compile = Command::new("mdbook");
     compile.arg("build").current_dir(target_dir.join("errorbook"));
     compile.status().unwrap();
+
+    //Command::new(target_dir.join("errorbook/book/index.html")).spawn().unwrap();
 }
