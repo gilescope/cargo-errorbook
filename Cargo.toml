@@ -3,10 +3,12 @@ name = "cargo-errorbook"
 version = "0.0.1"
 authors = ["Giles Cope <gilescope@gmail.com>"]
 edition = "2018"
-
+description = "Homage to rust error messages. Book them!"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/gilescope/cargo-errorbook"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mdbook = "*"
-cargo_metadata = "*"
-webbrowser = "*"
+mdbook = "0.4"
+cargo_metadata = "0.12"
+webbrowser = "0.5"
