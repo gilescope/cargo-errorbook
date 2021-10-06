@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::process::Command;
 use std::process::Stdio;
@@ -27,11 +27,10 @@ fn main() {
 
     println!("running {:?}", &cmd);
     let out = cmd.output().unwrap();
-    let mut errors = HashMap::new();
+    let mut errors = BTreeMap::new();
     let reader = std::io::BufReader::new(out.stdout.take(10_000_000));
     for message in cargo_metadata::Message::parse_stream(reader) {
         if let Message::CompilerMessage(msg) = message.unwrap() {
-            println!("{:#?}", msg);
             let rendered = msg.message.rendered.unwrap();
             let first = rendered.lines().next().unwrap();
             let entry = errors
@@ -43,6 +42,10 @@ fn main() {
                 code: msg.message.code,
             });
         }
+    }
+    for (_, errors) in errors.iter_mut() {
+        errors.sort_by(|a, b| a.name.cmp(&b.name));
+        errors.retain(|e| !e.name.ends_with("warnings emitted"));
     }
     write_book(errors, target_dir);
 }
@@ -62,7 +65,7 @@ struct Error {
     code: Option<DiagnosticCode>,
 }
 
-fn write_book(errors: HashMap<String, Vec<Error>>, target_dir: PathBuf) {
+fn write_book(errors: BTreeMap<String, Vec<Error>>, target_dir: PathBuf) {
     println!("Found {} improvement points.", errors.len());
     if errors.is_empty() {
         return;
@@ -80,7 +83,12 @@ fn write_book(errors: HashMap<String, Vec<Error>>, target_dir: PathBuf) {
     
     [output.html]
     mathjax-support = false
+    default-theme = rust
+    preferred-dark-theme = true
     
+    [output.html.fold]
+    enable = true
+    level = 0
     
     [output.html.search]
     limit-results = 20
@@ -133,19 +141,24 @@ fn write_book(errors: HashMap<String, Vec<Error>>, target_dir: PathBuf) {
                 error.name, error.rendered
             );
             if let Some(code) = &error.code {
+                let mut explanation = error.rendered.clone();
                 if let Some(explanation) = &code.explanation {
                     error_page.push('\n');
                     error_page.push_str("## Explanation:\n");
                     error_page.push_str(&explanation.replace("\n\n```", "\n\n```rust"));
                 }
-                if code.code.starts_with('E') && code.code.len() <= 6 {
-                    error_page.push_str(&format!("\n\n( [Explain {} to me](https://doc.rust-lang.org/error-index.html#{}) ).\n\n", code.code, code.code));
+                explanation.push(' ');
+
+                let url = if code.code.starts_with('E') && code.code.len() <= 6 {
+                    format!("https://doc.rust-lang.org/error-index.html#{}", code.code)
                 } else {
-                    error_page.push_str(&format!(
-                        "\n\n( [Explain {} to me](https://duckduckgo.com/?q=rust+{}) ).\n\n",
-                        code.code, code.code
-                    ));
-                }
+                    if let Some(ss) = dbg!(&explanation).rfind("https://") {
+                        explanation.chars().skip(ss).take_while(|ch| !ch.is_whitespace()).collect::<String>()      
+                    } else {
+                        format!("https://duckduckgo.com/?q=rust+{}", code.code)
+                    }
+                };
+                error_page.push_str(&format!("\n\n( [Explain {} to me]({}) ).\n\n", code.code, url));
             }
             let error_pg_filename = format!("errorbook/src/{}{}", i, pkg_filename);
             fs::write(target_dir.join(error_pg_filename), error_page)
