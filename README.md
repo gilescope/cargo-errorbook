@@ -11,7 +11,11 @@ cargo install cargo-errorbook
 Then when you get some fun errors, run:
 
 ```
-cargo errorbook
+cargo errorbook clippy
+```
+or
+```
+cargo errorbook check
 ```
 
 and bind them into a nice searchable collector's edition book for posterity.

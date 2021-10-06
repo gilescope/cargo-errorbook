@@ -1,6 +1,6 @@
 [package]
 name = "cargo-errorbook"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Giles Cope <gilescope@gmail.com>"]
 edition = "2018"
 description = "Homage to rust error messages. Book them!"
