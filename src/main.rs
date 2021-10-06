@@ -1,11 +1,13 @@
+#![feature(slice_group_by)]
 use std::collections::BTreeMap;
 use std::fs;
 use std::process::Command;
 use std::process::Stdio;
 use std::{io::Read, path::PathBuf};
+use std::path::Path;
 
 use cargo_metadata::diagnostic::DiagnosticCode;
-use cargo_metadata::*;
+use cargo_metadata::Message;
 
 //TODO: NFT your error book in one click...
 fn main() {
@@ -43,11 +45,11 @@ fn main() {
             });
         }
     }
-    for (_, errors) in errors.iter_mut() {
+    for errors in errors.values_mut() {
         errors.sort_by(|a, b| a.name.cmp(&b.name));
         errors.retain(|e| !e.name.ends_with("warnings emitted"));
     }
-    write_book(errors, target_dir);
+    write_book(&errors, &target_dir);
 }
 
 fn crate_name(name: &str) -> String {
@@ -65,7 +67,7 @@ struct Error {
     code: Option<DiagnosticCode>,
 }
 
-fn write_book(errors: BTreeMap<String, Vec<Error>>, target_dir: PathBuf) {
+fn write_book(errors: &BTreeMap<String, Vec<Error>>, target_dir: &Path) {
     println!("Found {} improvement points.", errors.len());
     if errors.is_empty() {
         return;
@@ -112,54 +114,32 @@ fn write_book(errors: BTreeMap<String, Vec<Error>>, target_dir: PathBuf) {
         summary.push_str(&format!("\n   - [{}]({})", pkg, pkg_filename));
         let mut pkg_page = format!(r##"# {}"##, pkg);
 
-        for (i, error) in errors.iter().enumerate() {
+        for (i, error) in errors.as_slice().group_by(|a,b|a.name == b.name).enumerate() {
             pkg_page.push_str(&format!(
-                "\n   - [{}]({}{})",
-                error.name.replace("[", "").replace("]", ""),
+                "\n   - [{} {}]({}{})",
+                error[0].name.replace("[", "").replace("]", ""),
+                error.len(),
                 i,
-                pkg_filename
+                pkg_filename,
             ));
         }
 
         let pkg_pg_filename = format!("errorbook/src/{}", pkg_filename);
         fs::write(target_dir.join(pkg_pg_filename), pkg_page).expect("Unable to write file");
 
-        for (i, error) in errors.iter().enumerate() {
+        for (i, error) in errors.as_slice().group_by(|a,b|a.name == b.name).enumerate() {
             summary.push_str(&format!(
                 "\n      - [{}]({}{})",
-                error.name.replace("[", "").replace("]", ""),
+                error[0].name.replace("[", "").replace("]", ""),
                 i,
                 pkg_filename
             ));
-            let mut error_page = format!(
-                r##"# {}
-```rust,noplaypen
-{}
-```
 
-"##,
-                error.name, error.rendered
-            );
-            if let Some(code) = &error.code {
-                let mut explanation = error.rendered.clone();
-                if let Some(explanation) = &code.explanation {
-                    error_page.push('\n');
-                    error_page.push_str("## Explanation:\n");
-                    error_page.push_str(&explanation.replace("\n\n```", "\n\n```rust"));
-                }
-                explanation.push(' ');
-
-                let url = if code.code.starts_with('E') && code.code.len() <= 6 {
-                    format!("https://doc.rust-lang.org/error-index.html#{}", code.code)
-                } else {
-                    if let Some(ss) = dbg!(&explanation).rfind("https://") {
-                        explanation.chars().skip(ss).take_while(|ch| !ch.is_whitespace()).collect::<String>()      
-                    } else {
-                        format!("https://duckduckgo.com/?q=rust+{}", code.code)
-                    }
-                };
-                error_page.push_str(&format!("\n\n( [Explain {} to me]({}) ).\n\n", code.code, url));
+            let mut error_page = String::new();
+            for err in error { 
+                write_err(&mut error_page, err);
             }
+
             let error_pg_filename = format!("errorbook/src/{}{}", i, pkg_filename);
             fs::write(target_dir.join(error_pg_filename), error_page)
                 .expect("Unable to write file");
@@ -182,4 +162,35 @@ fn write_book(errors: BTreeMap<String, Vec<Error>>, target_dir: PathBuf) {
     }
     let url = dbg!(format!("file://{}", index.display()));
     webbrowser::open(&url).unwrap();
+}
+
+fn write_err(error_page: &mut String, err: &Error) {
+    error_page.push_str(&format!(
+        r##"# {}
+```rust,noplaypen
+{}
+```
+
+"##,
+        err.name, err.rendered
+    ));
+    error_page.push('\n');
+    if let Some(code) = &err.code {
+        let mut explanation = err.rendered.clone();
+        if let Some(explanation) = &code.explanation {
+            error_page.push('\n');
+            error_page.push_str("## Explanation:\n");
+            error_page.push_str(&explanation.replace("\n\n```", "\n\n```rust"));
+        }
+        explanation.push(' ');
+
+        let url = if code.code.starts_with('E') && code.code.len() <= 6 {
+            format!("https://doc.rust-lang.org/error-index.html#{}", code.code)
+        } else if let Some(ss) = dbg!(&explanation).rfind("https://") {
+            explanation.chars().skip(ss).take_while(|ch| !ch.is_whitespace()).collect::<String>()      
+        } else {
+            format!("https://duckduckgo.com/?q=rust+{}", code.code)
+        };
+        error_page.push_str(&format!("\n\n( [Explain {} to me]({}) )\n\n", code.code, url));
+    }    
 }
